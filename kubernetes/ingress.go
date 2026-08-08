@@ -94,9 +94,14 @@ type IngressService struct {
 	// AnnotationsPrefix defines the common prefix used in the nginx ingress controller
 	AnnotationsPrefix string
 	// IngressClass defines the default ingress class used by the controller
-	IngressClass          string
-	UseIngressClassName   bool
-	HTTPPort              int
+	IngressClass        string
+	UseIngressClassName bool
+	HTTPPort            int
+	// AddressScheme, when set, prefixes the addresses reported by
+	// GetAddresses (e.g. "https" when TLS is terminated before the ingress
+	// controller, such as at a cloud load balancer). Ingresses with a TLS
+	// section keep reporting https regardless of this value.
+	AddressScheme         string
 	OptsAsAnnotations     map[string]string
 	OptsAsAnnotationsDocs map[string]string
 }
@@ -533,12 +538,14 @@ func (k *IngressService) GetAddresses(ctx context.Context, id router.InstanceID)
 	hosts := []string{}
 	urls := []string{}
 	for _, rule := range ingress.Spec.Rules {
-		if k.HTTPPort == 0 {
-			hosts = append(hosts, rule.Host)
-		} else {
-			hostPort := net.JoinHostPort(rule.Host, strconv.Itoa(k.HTTPPort))
-			hosts = append(hosts, hostPort)
+		host := rule.Host
+		if k.HTTPPort != 0 {
+			host = net.JoinHostPort(rule.Host, strconv.Itoa(k.HTTPPort))
 		}
+		if k.AddressScheme != "" {
+			host = fmt.Sprintf("%s://%s", k.AddressScheme, host)
+		}
+		hosts = append(hosts, host)
 	}
 	for _, hostTLS := range ingress.Spec.TLS {
 		for _, h := range hostTLS.Hosts {
